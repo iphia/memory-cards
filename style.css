@@ -13,3 +13,5 @@
 .editor-tabs{display:flex;gap:4px;overflow-x:auto;margin:22px 0 20px;padding:4px;background:#edf2fa;border-radius:10px}.editor-tabs [role="tab"]{flex:1 0 auto;padding:12px 14px;border:0;border-radius:7px;background:transparent;color:#52627e;font-size:14px;white-space:nowrap}.editor-tabs [aria-selected="true"]{background:#234d9e;color:#fff;font-weight:700}.editor-tab-panel[hidden]{display:none}.editor-tab-panel .clipboard-panel,.editor-tab-panel .backup-panel{border-top:0;margin-top:0;padding-top:0}.editor-tab-panel>label:first-child{margin-top:0}
 
 .edit-details{flex:1;min-width:0}.edit-details .list-title{display:block}.edit-details .list-meta{flex-wrap:wrap;gap:6px 12px;line-height:1.6}.edit-details progress{height:4px;margin:10px 0 0}.edit-row:has(.edit-details){align-items:flex-start}@media(max-width:420px){.edit-details{flex-basis:100%}}
+
+.flashcard{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:pan-y pinch-zoom}
