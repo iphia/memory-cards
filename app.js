@@ -74,12 +74,15 @@ function selectPrompt(card){
  promptIndex=choice.index;
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{storageWarning='저장 공간에 접근할 수 없습니다. 현재 기록은 창을 닫으면 사라질 수 있습니다.';}}
-function current(){return state.cards.find(c=>c.id===state.queue[state.index]);}
+function eligible(card){return card.hits<5;}
+function current(){return state.cards.find(c=>c.id===state.queue[state.index]&&eligible(c));}
 function prepare(){
  applyDecay(state);
+ const queued=new Set(state.queue);
+ for(const card of state.cards){if(eligible(card)&&!queued.has(card.id)){state.queue.push(card.id);queued.add(card.id);}}
  while(state.index<state.queue.length && !current())state.index++;
  if(state.index>=state.queue.length){
-  const ids=state.cards.map(c=>c.id);
+  const ids=state.cards.filter(eligible).map(c=>c.id);
   if(ids.length){state.correctIds=[];state.promptChoices=[];state.queue=shuffle(ids);state.index=0;revealed=false;promptKey='';return true;}
  }
  return false;
@@ -91,7 +94,7 @@ function decayText(c){
 }
 function render(){
  const shuffled=prepare();
- const c=current(), active=state.cards.length;
+ const c=current(), active=state.cards.filter(eligible).length;
  selectPrompt(c);save();
  $('total').textContent=state.cards.length;$('active').textContent=active;$('mastered').textContent=state.cards.filter(c=>c.hits>=5).length;
  $('decay-hours').value=String(state.decayHours);
@@ -105,9 +108,9 @@ function render(){
  $('next').disabled=!c;
  $('next').textContent=hasNext()?'다음 카드 →':'다음 바퀴 →';
  $('card-label').textContent=c?(revealed?'ANSWER':'QUESTION'):'ALL CLEAR';
- $('question').textContent=c?c.keywords[promptIndex]:'첫 카드를 추가해 보세요.';
+ $('question').textContent=c?c.keywords[promptIndex]:state.cards.length?'모든 카드가 5회 이상입니다.':'첫 카드를 추가해 보세요.';
  $('answer').textContent=c?c.keywords.filter((_,i)=>i!==promptIndex).join(', '):'';
- $('hint').textContent=c?(revealed?'다시 눌러 가리기 · 길게 눌러 수정':'눌러 정답 확인 · 길게 눌러 수정'):'상단의 카드 관리에서 내용을 추가할 수 있어요.';
+ $('hint').textContent=c?(revealed?'다시 눌러 가리기 · 길게 눌러 수정':'눌러 정답 확인 · 길게 눌러 수정'):state.cards.length?'현재 정답 횟수가 4회 이하가 되면 자동으로 다시 나옵니다.':'상단의 카드 관리에서 내용을 추가할 수 있어요.';
  $('card-count').textContent=c?`현재 정답 ${c.hits}회 · 누적 정답 ${c.total}회`:'';
  $('dots').replaceChildren();if(c)for(let i=0;i<5;i++){const dot=document.createElement('span');dot.className='dot'+(i<c.hits?' done':'');$('dots').append(dot);}
  $('wrong').disabled=!c||!revealed;
@@ -138,15 +141,16 @@ function grade(ok){
  applyDecay(state);
  if(ok){state.correctIds.push(c.id);c.hits++;c.total++;c.nextDecayAt=Date.now()+decayInterval(state);}
  else c.wrong=(c.wrong||0)+1;
+ const excluded=ok&&!eligible(c);
  state.index++;revealed=false;promptKey='';const shuffled=render();
  if(shuffled)animateShuffle();
- $('notice').textContent=storageWarning||(shuffled?'카드 순서를 새로 섞었습니다.':'');
+ $('notice').textContent=storageWarning||[excluded?'5회 정답으로 학습에서 제외했습니다. 4회로 줄어들면 다시 나옵니다.':'',shuffled?'카드 순서를 새로 섞었습니다.':''].filter(Boolean).join(' ');
 }
 function previousIndex(){
- for(let i=state.index-1;i>=0;i--){const c=state.cards.find(c=>c.id===state.queue[i]);if(c)return i;}
+ for(let i=state.index-1;i>=0;i--){const c=state.cards.find(c=>c.id===state.queue[i]);if(c&&eligible(c))return i;}
  return -1;
 }
-function hasNext(){return state.queue.slice(state.index+1).some(id=>state.cards.some(c=>c.id===id));}
+function hasNext(){return state.queue.slice(state.index+1).some(id=>state.cards.some(c=>c.id===id&&eligible(c)));}
 function navigate(direction){
  if(!current())return;
  if(direction===-1){const index=previousIndex();if(index<0)return;state.index=index;}
@@ -227,7 +231,7 @@ function editorList(){
  const details=document.createElement('div'),meta=document.createElement('div'),count=document.createElement('span'),status=document.createElement('span'),bar=document.createElement('progress');
  details.className='edit-details';text.className='list-title';
  meta.className='list-meta';count.textContent=`현재 정답 ${c.hits}회 · 누적 정답 ${c.total}회`;
- status.textContent=(c.id===current()?.id?'학습 중 · ':'')+decayText(c);
+ status.textContent=(!eligible(c)?'학습 제외 · ':c.id===current()?.id?'학습 중 · ':'')+decayText(c);
  bar.max=5;bar.value=Math.min(c.hits,5);bar.setAttribute('aria-label',`${c.keywords.join(', ')} 목표 진행도`);
  meta.append(count,status);details.append(text,meta,bar);
  actions.className='edit-actions';actions.append(edit,button);row.append(details,actions);$('editable-list').append(row);}}
