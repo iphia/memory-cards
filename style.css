@@ -17,3 +17,5 @@
 .flashcard{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:pan-y pinch-zoom}
 
 .decay-settings h3{font-size:16px;margin:0}.decay-settings select{width:100%;min-height:44px;padding:10px 12px;border:1px solid #cbd7e8;border-radius:8px;background:#fff;color:#162443}#panel-settings .backup-panel{border-top:1px solid #dce4ef;margin-top:24px;padding-top:20px}#settings-status{line-height:1.6;color:#334465}
+
+.keyword-line{display:block;white-space:pre-wrap;overflow-wrap:anywhere}.keyword-line+.keyword-line{margin-top:6px}.keyword-line strong{font-weight:800}.keyword-flag{font-size:13px;font-weight:400;color:#65738c}

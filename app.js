@@ -7,18 +7,29 @@ const examples = [['임병찬', '독립의군부'], ['박상진', '대한광복�
 function validKeywords(words){return Array.isArray(words)&&words.length>=2&&words.length<=200&&words.every(w=>typeof w==='string'&&w.trim().length>0&&w.length<=10000);}
 function cardKeywords(card){return card.keywords||[card.q,card.a];}
 function validAnswerOnly(c){return c.answerOnly===undefined||(Array.isArray(c.answerOnly)&&c.answerOnly.length===c.keywords?.length&&c.answerOnly.every(v=>typeof v==='boolean')&&c.answerOnly.some(v=>!v));}
-function makeCard(input){const {keywords,answerOnly}=Array.isArray(input)?{keywords:input,answerOnly:input.map(()=>false)}:input;return {id:crypto.randomUUID(),keywords:[...keywords],answerOnly:[...answerOnly],hits:0,total:0,wrong:0,nextDecayAt:0};}
+function validBold(c){return c.bold===undefined||(Array.isArray(c.bold)&&c.bold.length===c.keywords?.length&&c.bold.every(v=>typeof v==='boolean'));}
+function makeCard(input){const {keywords,answerOnly}=Array.isArray(input)?{keywords:input,answerOnly:input.map(()=>false)}:input;return {id:crypto.randomUUID(),keywords:[...keywords],answerOnly:[...answerOnly],bold:[...(input.bold||keywords.map(()=>false))],hits:0,total:0,wrong:0,nextDecayAt:0};}
 function parseKeywords(text){
  const lines=text.trim().split(/\r?\n/).map(w=>w.trim()).filter(Boolean);
- const answerOnly=lines.map(w=>w.startsWith('-')||w.endsWith('-'));
- const keywords=lines.map(w=>w.replace(/^-+|-+$/g,'').trim());
+ const markers=lines.map(w=>(w.match(/^[-*]+/)?.[0]||'')+(w.match(/[-*]+$/)?.[0]||''));
+ const answerOnly=markers.map(m=>m.includes('-'));
+ const bold=markers.map(m=>m.includes('*'));
+ const keywords=lines.map(w=>w.replace(/^[-*]+|[-*]+$/g,'').trim());
  if(!validKeywords(keywords))throw Error('엔터로 구분해 키워드를 2~200개 입력해 주세요. 키워드 하나는 10,000자까지 가능합니다.');
  if(new Set(keywords.map(w=>w.normalize('NFC'))).size!==keywords.length)throw Error('같은 키워드가 중복되어 있습니다. 중복을 제거해 주세요.');
  if(answerOnly.every(Boolean))throw Error('문제로 사용할 키워드가 하나 이상 필요합니다. 하나 이상의 키워드에서 앞뒤 -를 지워 주세요.');
- return {keywords,answerOnly};
+ return {keywords,answerOnly,bold};
 }
-function keywordInput(card){return card.keywords.map((w,i)=>(card.answerOnly?.[i]?'-':'')+w).join('\n');}
-function keywordSummary(card){return card.keywords.map((w,i)=>w+(card.answerOnly?.[i]?' (정답 전용)':'')).join(' · ');}
+function keywordInput(card){return card.keywords.map((w,i)=>(card.answerOnly?.[i]?'-':'')+(card.bold?.[i]?'*':'')+w).join('\n');}
+function renderKeywordLines(target,card,indices,showFlags=false){
+ target.replaceChildren();
+ for(const i of indices){
+  const line=document.createElement('span'),word=document.createElement(card.bold?.[i]?'strong':'span');
+  line.className='keyword-line';word.textContent=card.keywords[i];line.append(word);
+  if(showFlags&&card.answerOnly?.[i]){const flag=document.createElement('span');flag.className='keyword-flag';flag.textContent=' (정답 전용)';line.append(flag);}
+  target.append(line);
+ }
+}
 
 function shuffle(ids){const out=[...ids];for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]];}return out;}
 function fresh(){const cards=examples.map(words=>makeCard(words));return {cards,queue:cards.map(c=>c.id),index:0,decayHours:24,correctIds:[],promptChoices:[]};}
@@ -26,7 +37,7 @@ function validCycle(s){
  return (s.correctIds===undefined||(Array.isArray(s.correctIds)&&s.correctIds.every(id=>typeof id==='string')&&new Set(s.correctIds).size===s.correctIds.length))&&
  (s.promptChoices===undefined||(Array.isArray(s.promptChoices)&&s.promptChoices.every(p=>p&&typeof p.id==='string'&&Number.isSafeInteger(p.index)&&p.index>=0)&&new Set(s.promptChoices.map(p=>p.id)).size===s.promptChoices.length));
 }
-function valid(s){return s && validCycle(s) && (s.decayHours===undefined||DECAY_HOURS.includes(s.decayHours)) && Array.isArray(s.cards) && s.cards.every(c=>c && typeof c.id==='string' && validAnswerOnly(c) && (c.keywords!==undefined?validKeywords(c.keywords):(typeof c.q==='string'&&typeof c.a==='string')) && Number.isSafeInteger(c.hits) && c.hits>=0 && Number.isInteger(c.total) && c.total>=0 && ((Number.isSafeInteger(c.nextDecayAt) && c.nextDecayAt>=0) || (c.nextDecayAt===undefined && Number.isSafeInteger(c.until) && c.until>=0))) && new Set(s.cards.map(c=>c.id)).size===s.cards.length && Array.isArray(s.queue) && s.queue.every(id=>typeof id==='string') && new Set(s.queue).size===s.queue.length && Number.isInteger(s.index) && s.index>=0 && s.index<=s.queue.length;}
+function valid(s){return s && validCycle(s) && (s.decayHours===undefined||DECAY_HOURS.includes(s.decayHours)) && Array.isArray(s.cards) && s.cards.every(c=>c && typeof c.id==='string' && validAnswerOnly(c) && validBold(c) && (c.keywords!==undefined?validKeywords(c.keywords):(typeof c.q==='string'&&typeof c.a==='string')) && Number.isSafeInteger(c.hits) && c.hits>=0 && Number.isInteger(c.total) && c.total>=0 && ((Number.isSafeInteger(c.nextDecayAt) && c.nextDecayAt>=0) || (c.nextDecayAt===undefined && Number.isSafeInteger(c.until) && c.until>=0))) && new Set(s.cards.map(c=>c.id)).size===s.cards.length && Array.isArray(s.queue) && s.queue.every(id=>typeof id==='string') && new Set(s.queue).size===s.queue.length && Number.isInteger(s.index) && s.index>=0 && s.index<=s.queue.length;}
 let state, storageWarning='';
 try{const raw=localStorage.getItem(KEY);state=raw?JSON.parse(raw):fresh();if(!valid(state))throw Error('invalid');}catch{state=fresh();storageWarning='저장된 기록을 읽을 수 없어 예시 카드로 시작했습니다.';}
 // Add the new example once while preserving existing cards and learning records.
@@ -44,6 +55,7 @@ function migrateDecay(s,now=Date.now()){
  for(const c of s.cards){
   if(!c.keywords)c.keywords=[c.q,c.a];
   if(!c.answerOnly)c.answerOnly=c.keywords.map(()=>false);
+  if(!c.bold)c.bold=c.keywords.map(()=>false);
   delete c.q;delete c.a;
   if(c.nextDecayAt===undefined)c.nextDecayAt=c.hits>0?(c.until>0?c.until:now+decayInterval(s)):0;
   delete c.until;
@@ -109,7 +121,8 @@ function render(){
  $('next').textContent=hasNext()?'다음 카드 →':'다음 바퀴 →';
  $('card-label').textContent=c?(revealed?'ANSWER':'QUESTION'):'ALL CLEAR';
  $('question').textContent=c?c.keywords[promptIndex]:state.cards.length?'모든 카드가 5회 이상입니다.':'첫 카드를 추가해 보세요.';
- $('answer').textContent=c?c.keywords.filter((_,i)=>i!==promptIndex).join(', '):'';
+ $('question').style.fontWeight=c?.bold[promptIndex]?'800':'500';
+ if(c)renderKeywordLines($('answer'),c,c.keywords.map((_,i)=>i).filter(i=>i!==promptIndex));else $('answer').replaceChildren();
  $('hint').textContent=c?(revealed?'다시 눌러 가리기 · 길게 눌러 수정':'눌러 정답 확인 · 길게 눌러 수정'):state.cards.length?'현재 정답 횟수가 4회 이하가 되면 자동으로 다시 나옵니다.':'상단의 카드 관리에서 내용을 추가할 수 있어요.';
  $('card-count').textContent=c?`현재 정답 ${c.hits}회 · 누적 정답 ${c.total}회`:'';
  $('dots').replaceChildren();if(c)for(let i=0;i<5;i++){const dot=document.createElement('span');dot.className='dot'+(i<c.hits?' done':'');$('dots').append(dot);}
@@ -208,7 +221,7 @@ function resetEditor(){
  editingId=null;
  $('card-keywords').value='';
  $('save-card').textContent='카드 추가';$('cancel-edit').hidden=true;
- $('form-help').textContent='키워드를 한 줄에 하나씩 입력하세요. 앞뒤 -는 정답 전용 표시입니다.';
+ $('form-help').textContent='키워드를 한 줄에 하나씩 입력하세요. 앞뒤 -는 정답 전용, *는 굵게 표시합니다.';
 }
 function startEdit(id){
  const card=state.cards.find(c=>c.id===id);if(!card)return;
@@ -225,7 +238,7 @@ function editorList(){
  $('search-status').textContent=query?`검색 결과 ${cards.length}개 / 전체 ${state.cards.length}개`:`전체 ${cards.length}개`;
  $('editable-list').replaceChildren();
  if(!cards.length){const empty=document.createElement('p');empty.className='muted small';empty.textContent=query?'검색 결과가 없습니다. 다른 검색어를 입력해 주세요.':'등록된 카드가 없습니다.';$('editable-list').append(empty);}
- for(const c of cards){const row=document.createElement('div'),text=document.createElement('span'),button=document.createElement('button');row.className='edit-row';text.textContent=keywordSummary(c);button.textContent='삭제';button.type='button';button.className='delete';button.setAttribute('aria-label',c.keywords.join(', ')+' 삭제');button.onclick=()=>{if(!confirm('이 카드와 학습 기록을 삭제할까요?'))return;const id=current()?.id;state.cards=state.cards.filter(x=>x.id!==c.id);if(c.id===id)revealed=false;if(editingId===c.id)resetEditor();render();editorList();};
+ for(const c of cards){const row=document.createElement('div'),text=document.createElement('span'),button=document.createElement('button');row.className='edit-row';renderKeywordLines(text,c,c.keywords.map((_,i)=>i),true);button.textContent='삭제';button.type='button';button.className='delete';button.setAttribute('aria-label',c.keywords.join(', ')+' 삭제');button.onclick=()=>{if(!confirm('이 카드와 학습 기록을 삭제할까요?'))return;const id=current()?.id;state.cards=state.cards.filter(x=>x.id!==c.id);if(c.id===id)revealed=false;if(editingId===c.id)resetEditor();render();editorList();};
  const edit=document.createElement('button'),actions=document.createElement('div');
  edit.type='button';edit.className='outline';edit.textContent='수정';edit.setAttribute('aria-label',c.keywords.join(', ')+' 수정');edit.onclick=()=>startEdit(c.id);
  const details=document.createElement('div'),meta=document.createElement('div'),count=document.createElement('span'),status=document.createElement('span'),bar=document.createElement('progress');
@@ -244,7 +257,7 @@ $('card-form').onsubmit=e=>{
  if(editingId){
   const card=state.cards.find(c=>c.id===editingId);
   if(!card){$('editor-status').textContent='이 카드는 삭제되어 수정할 수 없습니다.';return;}
-  state.promptChoices=state.promptChoices.filter(p=>p.id!==card.id);card.keywords=keywords.keywords;card.answerOnly=keywords.answerOnly;if(current()?.id===card.id)revealed=false;
+  state.promptChoices=state.promptChoices.filter(p=>p.id!==card.id);card.keywords=keywords.keywords;card.answerOnly=keywords.answerOnly;card.bold=keywords.bold;if(current()?.id===card.id)revealed=false;
   message='카드를 수정했습니다. 학습 기록은 유지됩니다.';
  }else{
   const card=makeCard(keywords);state.cards.push(card);state.queue.push(card.id);message='카드를 추가했습니다.';
@@ -271,7 +284,7 @@ function previewClipboard(){
  try{
   const cards=parseClipboard($('clipboard-text').value);
   pendingClipboard=cards;
-  for(const card of cards){const row=document.createElement('li');row.textContent=keywordSummary(card);$('clipboard-list').append(row);}
+  for(const card of cards){const row=document.createElement('li');renderKeywordLines(row,card,card.keywords.map((_,i)=>i),true);$('clipboard-list').append(row);}
   $('clipboard-title').textContent=`다음 카드 ${cards.length}개를 추가할까요?`;
   $('clipboard-confirm').textContent=`${cards.length}개 추가`;$('clipboard-confirm').disabled=false;
   $('clipboard-confirmation').hidden=false;
@@ -319,12 +332,13 @@ const BACKUP_FORMAT='five-recall-backup';
 const MAX_BACKUP_BYTES=10*1024*1024;
 function backupText(){
  applyDecay(state);save();
- return JSON.stringify({format:BACKUP_FORMAT,version:6,exportedAt:new Date().toISOString(),state},null,2);
+ return JSON.stringify({format:BACKUP_FORMAT,version:7,exportedAt:new Date().toISOString(),state},null,2);
 }
 function parseBackup(text){
  const data=JSON.parse(text);
- if(!data||data.format!==BACKUP_FORMAT||![1,2,3,4,5,6].includes(data.version)||!valid(data.state))throw Error('invalid');
+ if(!data||data.format!==BACKUP_FORMAT||![1,2,3,4,5,6,7].includes(data.version)||!valid(data.state))throw Error('invalid');
  const s=data.state;
+ if(data.version>=7&&!s.cards.every(c=>Array.isArray(c.bold)))throw Error('invalid');
  if(data.version>=5&&!DECAY_HOURS.includes(s.decayHours))throw Error('invalid');
  if(data.version>=6&&(!Array.isArray(s.correctIds)||!Array.isArray(s.promptChoices)))throw Error('invalid');
  const count=n=>Number.isSafeInteger(n)&&n>=0;
@@ -334,7 +348,7 @@ function parseBackup(text){
     (count(c.until)&&c.until<=8640000000000000&&c.hits<=5&&(c.until>0?c.hits===5:c.hits<5)):
     (count(c.nextDecayAt)&&c.nextDecayAt<=8640000000000000&&(c.hits>0?c.nextDecayAt>0:c.nextDecayAt===0))))||!s.queue.every(id=>id.length>0&&id.length<=200))throw Error('invalid');
  // Copy supported fields only; old queue IDs for deleted cards are skipped by prepare().
- return migrateDecay({cards:s.cards.map(c=>({id:c.id,...(data.version>=3?{keywords:[...c.keywords],...(data.version>=4?{answerOnly:[...c.answerOnly]}:{})}:{q:c.q,a:c.a}),hits:c.hits,total:c.total,wrong:c.wrong,...(data.version===1?{until:c.until}:{nextDecayAt:c.nextDecayAt})})),
+ return migrateDecay({cards:s.cards.map(c=>({id:c.id,...(data.version>=3?{keywords:[...c.keywords],...(data.version>=4?{answerOnly:[...c.answerOnly]}:{}),...(data.version>=7?{bold:[...c.bold]}:{})}:{q:c.q,a:c.a}),hits:c.hits,total:c.total,wrong:c.wrong,...(data.version===1?{until:c.until}:{nextDecayAt:c.nextDecayAt})})),
   queue:[...s.queue],index:s.index,examplesV2:true,decayHours:data.version>=5?s.decayHours:24,correctIds:data.version>=6?[...s.correctIds]:[],promptChoices:data.version>=6?s.promptChoices.map(p=>({id:p.id,index:p.index})):[]});
 }
 $('backup-download').onclick=()=>{
@@ -371,4 +385,4 @@ window.addEventListener('storage',e=>{if(e.key!==KEY||!e.newValue)return;try{con
 setInterval(()=>{if(state.cards.some(c=>c.nextDecayAt))render();},30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)render();});
 render();
-if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'read_learning_progress',description:'현재 암기 카드와 학습 진행도를 조회합니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:()=>({cards:state.cards.map(c=>({keywords:[...c.keywords],answerOnly:[...c.answerOnly],hits:c.hits,total:c.total,nextDecayAt:c.nextDecayAt}))})})).catch(()=>{});}catch{}}
+if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'read_learning_progress',description:'현재 암기 카드와 학습 진행도를 조회합니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:()=>({cards:state.cards.map(c=>({keywords:[...c.keywords],answerOnly:[...c.answerOnly],bold:[...c.bold],hits:c.hits,total:c.total,nextDecayAt:c.nextDecayAt}))})})).catch(()=>{});}catch{}}
