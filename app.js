@@ -49,6 +49,7 @@ function renderKeywordLines(target,card,indices,showFlags=false){
   const line=document.createElement('span'),word=document.createElement(card.bold?.[i]?'strong':'span');
   line.className='keyword-line';word.textContent=card.keywords[i];line.append(word);
   if(showFlags&&card.answerOnly?.[i]){const flag=document.createElement('span');flag.className='keyword-flag';flag.textContent=' (정답 전용)';line.append(flag);}
+  else if(showFlags&&card.keywordLocks?.some(lock=>lock.index===i)){const flag=document.createElement('span');flag.className='keyword-flag keyword-locked';flag.textContent=' (맞힘 · 일시 제외)';line.append(flag);}
   target.append(line);
  }
 }
