@@ -21,3 +21,5 @@
 .keyword-line{display:block;white-space:pre-wrap;overflow-wrap:anywhere}.keyword-line+.keyword-line{margin-top:6px}.keyword-line strong{font-weight:800}.keyword-flag{font-size:13px;font-weight:400;color:#65738c}
 
 .keyword-locked{color:#285f99}
+
+.dot.partial{background:#a5c9ff}.review-meta{flex-wrap:wrap;gap:10px}#dots{margin-left:auto;flex-shrink:0}

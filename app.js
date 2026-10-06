@@ -30,7 +30,13 @@ function lockCorrectKeyword(card,index){
  card.keywordLocks=card.keywordLocks.filter(lock=>lock.index!==index);
  card.keywordLocks.push({index,remaining});
 }
-function makeCard(input){const {keywords,answerOnly}=Array.isArray(input)?{keywords:input,answerOnly:input.map(()=>false)}:input;return {id:crypto.randomUUID(),keywords:[...keywords],answerOnly:[...answerOnly],bold:[...(input.bold||keywords.map(()=>false))],keywordLocks:[],hits:0,total:0,wrong:0,nextDecayAt:0};}
+function validMatched(c){
+ if(c.matchedKeywords===undefined)return true;
+ const candidates=(c.keywords||[]).map((_,i)=>i).filter(i=>!c.answerOnly?.[i]);
+ return Array.isArray(c.matchedKeywords)&&c.matchedKeywords.length<candidates.length&&new Set(c.matchedKeywords).size===c.matchedKeywords.length&&c.matchedKeywords.every(i=>candidates.includes(i));
+}
+function partialText(card){return card.matchedKeywords.length?` · 키워드 ${card.matchedKeywords.length}/${card.answerOnly.filter(v=>!v).length} 정답`:'';}
+function makeCard(input){const {keywords,answerOnly}=Array.isArray(input)?{keywords:input,answerOnly:input.map(()=>false)}:input;return {id:crypto.randomUUID(),keywords:[...keywords],answerOnly:[...answerOnly],bold:[...(input.bold||keywords.map(()=>false))],keywordLocks:[],matchedKeywords:[],hits:0,total:0,wrong:0,nextDecayAt:0};}
 function parseKeywords(text){
  const lines=text.trim().split(/\r?\n/).map(w=>w.trim()).filter(Boolean);
  const markers=lines.map(w=>(w.match(/^[-*]+/)?.[0]||'')+(w.match(/[-*]+$/)?.[0]||''));
@@ -60,7 +66,7 @@ function validCycle(s){
  return (s.correctIds===undefined||(Array.isArray(s.correctIds)&&s.correctIds.every(id=>typeof id==='string')&&new Set(s.correctIds).size===s.correctIds.length))&&
  (s.promptChoices===undefined||(Array.isArray(s.promptChoices)&&s.promptChoices.every(p=>p&&typeof p.id==='string'&&Number.isSafeInteger(p.index)&&p.index>=0)&&new Set(s.promptChoices.map(p=>p.id)).size===s.promptChoices.length));
 }
-function valid(s){return s && validCycle(s) && (s.decayHours===undefined||DECAY_HOURS.includes(s.decayHours)) && Array.isArray(s.cards) && s.cards.every(c=>c && typeof c.id==='string' && validAnswerOnly(c) && validBold(c) && validKeywordLocks(c) && (c.keywords!==undefined?validKeywords(c.keywords):(typeof c.q==='string'&&typeof c.a==='string')) && Number.isSafeInteger(c.hits) && c.hits>=0 && Number.isInteger(c.total) && c.total>=0 && ((Number.isSafeInteger(c.nextDecayAt) && c.nextDecayAt>=0) || (c.nextDecayAt===undefined && Number.isSafeInteger(c.until) && c.until>=0))) && new Set(s.cards.map(c=>c.id)).size===s.cards.length && Array.isArray(s.queue) && s.queue.every(id=>typeof id==='string') && new Set(s.queue).size===s.queue.length && Number.isInteger(s.index) && s.index>=0 && s.index<=s.queue.length;}
+function valid(s){return s && validCycle(s) && (s.decayHours===undefined||DECAY_HOURS.includes(s.decayHours)) && Array.isArray(s.cards) && s.cards.every(c=>c && typeof c.id==='string' && validAnswerOnly(c) && validBold(c) && validKeywordLocks(c) && validMatched(c) && (c.keywords!==undefined?validKeywords(c.keywords):(typeof c.q==='string'&&typeof c.a==='string')) && Number.isSafeInteger(c.hits) && c.hits>=0 && Number.isInteger(c.total) && c.total>=0 && ((Number.isSafeInteger(c.nextDecayAt) && c.nextDecayAt>=0) || (c.nextDecayAt===undefined && Number.isSafeInteger(c.until) && c.until>=0))) && new Set(s.cards.map(c=>c.id)).size===s.cards.length && Array.isArray(s.queue) && s.queue.every(id=>typeof id==='string') && new Set(s.queue).size===s.queue.length && Number.isInteger(s.index) && s.index>=0 && s.index<=s.queue.length;}
 let state, storageWarning='';
 try{const raw=localStorage.getItem(KEY);state=raw?JSON.parse(raw):fresh();if(!valid(state))throw Error('invalid');}catch{state=fresh();storageWarning='저장된 기록을 읽을 수 없어 예시 카드로 시작했습니다.';}
 // Add the new example once while preserving existing cards and learning records.
@@ -80,6 +86,7 @@ function migrateDecay(s,now=Date.now()){
   if(!c.answerOnly)c.answerOnly=c.keywords.map(()=>false);
   if(!c.bold)c.bold=c.keywords.map(()=>false);
   if(!c.keywordLocks)c.keywordLocks=[];
+  if(!c.matchedKeywords)c.matchedKeywords=[];
   delete c.q;delete c.a;
   if(c.nextDecayAt===undefined)c.nextDecayAt=c.hits>0?(c.until>0?c.until:now+decayInterval(s)):0;
   delete c.until;
@@ -133,7 +140,7 @@ function render(){
  selectPrompt(c);save();
  $('total').textContent=state.cards.length;$('active').textContent=active;$('mastered').textContent=state.cards.filter(c=>c.hits>=5).length;
  $('decay-hours').value=String(state.decayHours);
- $('decay-summary').textContent=`마지막 정답부터 ${state.decayHours}시간마다 현재 정답 횟수가 1씩 줄어듭니다.`;
+ $('decay-summary').textContent=`마지막 1회 완성부터 ${state.decayHours}시간마다 현재 정답 횟수가 1씩 줄어듭니다.`;
  $('position').textContent=c?`${state.index+1} / ${state.queue.length}번째 카드`:'학습할 카드 없음';
  $('round-progress').max=Math.max(1,state.queue.length);$('round-progress').value=c?state.index+1:state.queue.length;
  $('card').disabled=!c;$('answer').hidden=!revealed||!c;
@@ -147,8 +154,8 @@ function render(){
  $('question').style.fontWeight=c?.bold[promptIndex]?'800':'500';
  if(c)renderKeywordLines($('answer'),c,c.keywords.map((_,i)=>i).filter(i=>i!==promptIndex));else $('answer').replaceChildren();
  $('hint').textContent=c?(revealed?'다시 눌러 가리기 · 길게 눌러 수정':'눌러 정답 확인 · 길게 눌러 수정'):state.cards.length?'현재 정답 횟수가 4회 이하가 되면 자동으로 다시 나옵니다.':'상단의 카드 관리에서 내용을 추가할 수 있어요.';
- $('card-count').textContent=c?`현재 정답 ${c.hits}회 · 누적 정답 ${c.total}회`:'';
- $('dots').replaceChildren();if(c)for(let i=0;i<5;i++){const dot=document.createElement('span');dot.className='dot'+(i<c.hits?' done':'');$('dots').append(dot);}
+ $('card-count').textContent=c?`현재 정답 ${c.hits}회 · 누적 정답 ${c.total}회${partialText(c)}`:'';
+ $('dots').replaceChildren();if(c)for(let i=0;i<5;i++){const dot=document.createElement('span');dot.className='dot'+(i<c.hits?' done':i===c.hits&&c.matchedKeywords.length?' partial':'');$('dots').append(dot);}
  $('wrong').disabled=!c||!revealed;
  const alreadyCorrect=!!c&&state.correctIds.includes(c.id);
  $('correct').disabled=!c||!revealed||alreadyCorrect;
@@ -175,12 +182,19 @@ function reveal(){if(!current())return;revealed=!revealed;render();}
 function grade(ok){
  const c=current();if(!c||!revealed||(ok&&state.correctIds.includes(c.id)))return;
  applyDecay(state);
- if(ok){lockCorrectKeyword(c,promptIndex);state.correctIds.push(c.id);c.hits++;c.total++;c.nextDecayAt=Date.now()+decayInterval(state);}
+ let completed=false;
+ if(ok){
+  lockCorrectKeyword(c,promptIndex);state.correctIds.push(c.id);
+  if(!c.matchedKeywords.includes(promptIndex))c.matchedKeywords.push(promptIndex);
+  if(c.matchedKeywords.length===c.answerOnly.filter(v=>!v).length){
+   c.matchedKeywords=[];c.hits++;c.total++;c.nextDecayAt=Date.now()+decayInterval(state);completed=true;
+  }
+ }
  else c.wrong=(c.wrong||0)+1;
  const excluded=ok&&!eligible(c);
  state.index++;revealed=false;promptKey='';const shuffled=render();
  if(shuffled)animateShuffle();
- $('notice').textContent=storageWarning||[excluded?'5회 정답으로 학습에서 제외했습니다. 4회로 줄어들면 다시 나옵니다.':'',shuffled?'카드 순서를 새로 섞었습니다.':''].filter(Boolean).join(' ');
+ $('notice').textContent=storageWarning||[excluded?'5회 정답으로 학습에서 제외했습니다. 4회로 줄어들면 다시 나옵니다.':completed?'모든 문제 키워드를 맞혀 정답 카운트가 1회 올라갔습니다.':'',shuffled?'카드 순서를 새로 섞었습니다.':''].filter(Boolean).join(' ');
 }
 function previousIndex(){
  for(let i=state.index-1;i>=0;i--){const c=state.cards.find(c=>c.id===state.queue[i]);if(c&&eligible(c))return i;}
@@ -266,7 +280,7 @@ function editorList(){
  edit.type='button';edit.className='outline';edit.textContent='수정';edit.setAttribute('aria-label',c.keywords.join(', ')+' 수정');edit.onclick=()=>startEdit(c.id);
  const details=document.createElement('div'),meta=document.createElement('div'),count=document.createElement('span'),status=document.createElement('span'),bar=document.createElement('progress');
  details.className='edit-details';text.className='list-title';
- meta.className='list-meta';count.textContent=`현재 정답 ${c.hits}회 · 누적 정답 ${c.total}회`;
+ meta.className='list-meta';count.textContent=`현재 정답 ${c.hits}회 · 누적 정답 ${c.total}회${partialText(c)}`;
  status.textContent=(!eligible(c)?'학습 제외 · ':c.id===current()?.id?'학습 중 · ':'')+decayText(c);
  bar.max=5;bar.value=Math.min(c.hits,5);bar.setAttribute('aria-label',`${c.keywords.join(', ')} 목표 진행도`);
  meta.append(count,status);details.append(text,meta,bar);
@@ -280,7 +294,7 @@ $('card-form').onsubmit=e=>{
  if(editingId){
   const card=state.cards.find(c=>c.id===editingId);
   if(!card){$('editor-status').textContent='이 카드는 삭제되어 수정할 수 없습니다.';return;}
-  if(JSON.stringify([card.keywords,card.answerOnly])!==JSON.stringify([keywords.keywords,keywords.answerOnly]))card.keywordLocks=[];
+  if(JSON.stringify([card.keywords,card.answerOnly])!==JSON.stringify([keywords.keywords,keywords.answerOnly])){card.keywordLocks=[];card.matchedKeywords=[];}
   state.promptChoices=state.promptChoices.filter(p=>p.id!==card.id);card.keywords=keywords.keywords;card.answerOnly=keywords.answerOnly;card.bold=keywords.bold;if(current()?.id===card.id)revealed=false;
   message='카드를 수정했습니다. 학습 기록은 유지됩니다.';
  }else{
@@ -356,12 +370,13 @@ const BACKUP_FORMAT='five-recall-backup';
 const MAX_BACKUP_BYTES=10*1024*1024;
 function backupText(){
  applyDecay(state);save();
- return JSON.stringify({format:BACKUP_FORMAT,version:8,exportedAt:new Date().toISOString(),state},null,2);
+ return JSON.stringify({format:BACKUP_FORMAT,version:9,exportedAt:new Date().toISOString(),state},null,2);
 }
 function parseBackup(text){
  const data=JSON.parse(text);
- if(!data||data.format!==BACKUP_FORMAT||![1,2,3,4,5,6,7,8].includes(data.version)||!valid(data.state))throw Error('invalid');
+ if(!data||data.format!==BACKUP_FORMAT||![1,2,3,4,5,6,7,8,9].includes(data.version)||!valid(data.state))throw Error('invalid');
  const s=data.state;
+ if(data.version>=9&&!s.cards.every(c=>Array.isArray(c.matchedKeywords)))throw Error('invalid');
  if(data.version>=8&&!s.cards.every(c=>Array.isArray(c.keywordLocks)))throw Error('invalid');
  if(data.version>=7&&!s.cards.every(c=>Array.isArray(c.bold)))throw Error('invalid');
  if(data.version>=5&&!DECAY_HOURS.includes(s.decayHours))throw Error('invalid');
@@ -373,7 +388,7 @@ function parseBackup(text){
     (count(c.until)&&c.until<=8640000000000000&&c.hits<=5&&(c.until>0?c.hits===5:c.hits<5)):
     (count(c.nextDecayAt)&&c.nextDecayAt<=8640000000000000&&(c.hits>0?c.nextDecayAt>0:c.nextDecayAt===0))))||!s.queue.every(id=>id.length>0&&id.length<=200))throw Error('invalid');
  // Copy supported fields only; old queue IDs for deleted cards are skipped by prepare().
- return migrateDecay({cards:s.cards.map(c=>({id:c.id,...(data.version>=3?{keywords:[...c.keywords],...(data.version>=4?{answerOnly:[...c.answerOnly]}:{}),...(data.version>=7?{bold:[...c.bold]}:{})}:{q:c.q,a:c.a}),keywordLocks:data.version>=8?c.keywordLocks.map(lock=>({index:lock.index,remaining:[...lock.remaining]})):[],hits:c.hits,total:c.total,wrong:c.wrong,...(data.version===1?{until:c.until}:{nextDecayAt:c.nextDecayAt})})),
+ return migrateDecay({cards:s.cards.map(c=>({id:c.id,...(data.version>=3?{keywords:[...c.keywords],...(data.version>=4?{answerOnly:[...c.answerOnly]}:{}),...(data.version>=7?{bold:[...c.bold]}:{})}:{q:c.q,a:c.a}),matchedKeywords:data.version>=9?[...c.matchedKeywords]:[],keywordLocks:data.version>=8?c.keywordLocks.map(lock=>({index:lock.index,remaining:[...lock.remaining]})):[],hits:c.hits,total:c.total,wrong:c.wrong,...(data.version===1?{until:c.until}:{nextDecayAt:c.nextDecayAt})})),
   queue:[...s.queue],index:s.index,examplesV2:true,decayHours:data.version>=5?s.decayHours:24,correctIds:data.version>=6?[...s.correctIds]:[],promptChoices:data.version>=6?s.promptChoices.map(p=>({id:p.id,index:p.index})):[]});
 }
 $('backup-download').onclick=()=>{
@@ -410,4 +425,4 @@ window.addEventListener('storage',e=>{if(e.key!==KEY||!e.newValue)return;try{con
 setInterval(()=>{if(state.cards.some(c=>c.nextDecayAt))render();},30000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)render();});
 render();
-if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'read_learning_progress',description:'현재 암기 카드와 학습 진행도를 조회합니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:()=>({cards:state.cards.map(c=>({keywords:[...c.keywords],answerOnly:[...c.answerOnly],bold:[...c.bold],hits:c.hits,total:c.total,nextDecayAt:c.nextDecayAt}))})})).catch(()=>{});}catch{}}
+if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'read_learning_progress',description:'현재 암기 카드와 학습 진행도를 조회합니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute:()=>({cards:state.cards.map(c=>({keywords:[...c.keywords],answerOnly:[...c.answerOnly],bold:[...c.bold],matchedKeywords:[...c.matchedKeywords],hits:c.hits,total:c.total,nextDecayAt:c.nextDecayAt}))})})).catch(()=>{});}catch{}}
