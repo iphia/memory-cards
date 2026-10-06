@@ -23,3 +23,7 @@
 .keyword-locked{color:#285f99}
 
 .dot.partial{background:#a5c9ff}.review-meta{flex-wrap:wrap;gap:10px}#dots{margin-left:auto;flex-shrink:0}
+
+[hidden]{display:none!important}.undo-button{width:100%;min-height:62px;border:1px solid #b7c9e5;border-radius:12px;background:#eaf1ff;color:#234d9e;padding:14px;font-weight:600}.save-error{color:#a32b2b;line-height:1.6;font-size:14px}.save-error:empty{display:none}.edit-warning{background:#fff4db;color:#71511a;border-radius:8px;padding:14px;font-size:14px;line-height:1.65}
+
+.recovery-panel{max-width:760px;margin:48px auto;padding:28px;background:#fff;border:1px solid #dce4ef;border-radius:18px}.recovery-panel .backup-actions{margin-top:24px}@media(max-width:800px){.recovery-panel{margin:28px 18px;padding:22px}}
