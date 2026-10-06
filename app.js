@@ -368,9 +368,20 @@ function startEdit(id){
  const card=state.cards.find(c=>c.id===id);if(!card)return;
  editingId=id;editingOriginal=keywordInput(card);$('edit-keywords').value=editingOriginal;
  $('edit-status').textContent='';updateEditNotice();
- if(!$('edit-dialog').open)$('edit-dialog').showModal();$('edit-keywords').focus();
+ const dialog=$('edit-dialog'),input=$('edit-keywords');
+ if(!dialog.open)dialog.showModal();
+ resizeEditInput();
+ input.focus({preventScroll:true});input.setSelectionRange(0,0);
+ input.scrollTop=0;input.scrollLeft=0;dialog.scrollTop=0;
 }
-$('edit-keywords').oninput=updateEditNotice;
+function resizeEditInput(){
+ const input=$('edit-keywords');
+ input.style.height='auto';input.style.height=Math.max(180,input.scrollHeight+2)+'px';
+ const count=input.value.split(/\r?\n/).filter(line=>line.trim()).length;
+ $('edit-content-summary').textContent=`전체 키워드 ${count}개 · 내용이 길면 수정창을 아래로 스크롤하세요.`;
+}
+$('edit-keywords').oninput=()=>{resizeEditInput();updateEditNotice();};
+window.addEventListener('resize',()=>{if($('edit-dialog').open)resizeEditInput();});
 $('close-edit').onclick=()=>$('edit-dialog').close();
 $('edit-dialog').addEventListener('close',()=>{editingId=null;editingOriginal='';});
 $('edit-form').onsubmit=e=>{
